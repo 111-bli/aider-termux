@@ -1,51 +1,61 @@
-# Tasker Profile Configuration for Aider on Termux
+# Tasker Profile Configuration for Hands-Free Aider on Termux
 
-This document explains how to set up **Tasker profiles** to automate and trigger your Aider voice setup on Android using Termux.
+This guide shows how to set up **Tasker** + **Termux:Tasker** + **AutoVoice** so you can trigger Aider completely hands-free on Android (e.g. say "Hey Aider, fix the bug in main.py" and have it run).
 
-## Why Use Tasker + Termux:Tasker?
+It builds on the main `SETUP.md` and the voice script in this repo.
 
-- Trigger Aider hands-free via voice (with AutoVoice)
-- Run scripts in background or foreground
-- React to Android events (WiFi, time, shake, notifications, etc.)
-- Get output back into Tasker for notifications or TTS
+## Why This Combo is Powerful
+
+- Voice wake-word style triggering ("Hey Aider ...")
+- Run Python/bash scripts in background
+- React to Android events (WiFi, shake, time, notifications)
+- Use native Android TTS (`termux-tts-speak`) for spoken replies
+- Capture Aider output and show it as notification or speak it back
+- Much closer to the continuous voice experience you want
 
 ## Prerequisites
 
-1. Install from **F-Droid** (recommended):
+1. **From F-Droid** (recommended for stability):
    - Termux
    - Termux:API
    - Termux:Tasker
-2. Install **Tasker** (paid, from Play Store or official site)
-3. (Strongly recommended for voice) Install **AutoVoice** plugin
-4. Grant permissions:
-   - Tasker → Additional permissions → `com.termux.permission.RUN_COMMAND`
-   - Disable battery optimization for Termux, Tasker, and Termux:Tasker
-   - For Android 10+: Termux → "Draw over other apps"
+2. **Tasker** (paid app)
+3. **AutoVoice** plugin (for easy voice commands)
+4. **Permissions & Battery**:
+   - In Tasker → ⋮ → More → Android Settings → Additional permissions → enable `com.termux.permission.RUN_COMMAND`
+   - Disable battery optimization for: Termux, Termux:API, Termux:Tasker, Tasker
+   - Android 10+: Allow Termux "Draw over other apps"
+   - Grant microphone permission to Termux:API app in Android Settings
 
-## Step 1: Prepare Scripts in Termux
+## 1. Prepare Scripts Folder
 
 ```bash
 mkdir -p ~/.termux/tasker
 cd ~/.termux/tasker
-
-# Create a launcher script (example)
-nano aider_voice_launcher.sh
 ```
 
-Example `aider_voice_launcher.sh`:
+### Recommended Launcher Script: `aider_voice_launcher.sh`
+
+Create this file:
 
 ```bash
 #!/data/data/com.termux/files/usr/bin/bash
-# This can call your Python voice script or start Aider with arguments
+
+# This launcher can be called from Tasker
+# It supports both voice commands and direct Aider launch
 
 COMMAND="$1"
 
 if [ -n "$COMMAND" ]; then
-    echo "Received command: $COMMAND"
-    # Example: pass to your Python script or Aider
-    python ~/aider-voice/voice_aider.py --command "$COMMAND"
+    echo "[Aider] Voice command received: $COMMAND"
+    # Option A: Call your Python voice wrapper (recommended)
+    python3 ~/aider-termux/voice_aider.py --command "$COMMAND"
+    
+    # Option B: Direct Aider with the command (if you have a project open)
+    # aider --message "$COMMAND" --yes
 else
-    python ~/aider-voice/voice_aider.py
+    echo "[Aider] Starting voice mode..."
+    python3 ~/aider-termux/voice_aider.py
 fi
 ```
 
@@ -54,54 +64,94 @@ Make it executable:
 chmod +x ~/.termux/tasker/aider_voice_launcher.sh
 ```
 
-## Step 2: Create a Task in Tasker
+> **Tip**: Adjust the path `~/aider-termux/voice_aider.py` to wherever you cloned the repo.
 
-1. Open Tasker → Tasks tab → + → New Task (name it "Run Aider Voice")
+## 2. Create a Task in Tasker
+
+1. Open Tasker → **Tasks** tab → **+** → name it **"Aider Voice Launcher"**
 2. Add Action:
-   - **Plugin** → **Termux:Tasker**
+   - **Plugin** → **Termux:Tasker** → **Run** (or the main action)
 3. Configure:
    - **Executable**: `~/.termux/tasker/aider_voice_launcher.sh`
-   - **Arguments**: `%avcommand`   (this comes from AutoVoice)
-   - **Run in background**: Yes (for most cases)
-4. (Optional) Add more actions like `termux-tts-speak` via Termux:API or notifications.
+   - **Arguments**: `%avcommand`   (this variable comes from AutoVoice)
+   - **Run in background**: **Yes** (important for hands-free)
+   - Timeout: 120 seconds or more
+4. (Optional but recommended) Add a second action:
+   - **Plugin** → **Termux:API** → **TTS Speak**
+   - Text: `Aider task started`
 
-## Step 3: Create a Voice-Triggered Profile (Recommended for Hands-Free)
+Save the Task.
 
-This gives you the closest experience to saying "Hey Aider" like in this chat.
+## 3. Create Voice-Triggered Profile (Best for Hands-Free)
 
-1. Go to **Profiles** tab → + → Event
+This is the closest to saying "Hey Aider" like in this chat.
+
+1. Go to **Profiles** tab → **+** → **Event**
 2. Choose **Plugin** → **AutoVoice** → **Recognized**
-3. In configuration:
+3. Configure:
    - **Command Filter**: `hey aider (.*)`
-   - Enable **Regex**
-4. Link it to the Task you created above ("Run Aider Voice")
-5. (Optional) Add **Event Behaviour** if you want it to stay active.
+   - Check **Regex**
+   - **Continuous** mode: Enable if available in AutoVoice settings
+4. Link this Profile to the Task **"Aider Voice Launcher"** you created above.
+5. (Optional) Add **Event Behaviour** → check "Stay active after task"
 
-Now say: **"Hey Aider, create a new Python script for..."**
+**Test it**: Say **"Hey Aider, list the files in this folder"** or **"Hey Aider, create a README for my project"**
 
-Tasker will capture it and run your Termux script.
+Tasker will capture everything after "hey aider" and pass it to your script.
 
-## Other Useful Profile Examples
+## 4. Returning Output & Speaking Results
 
-- **Shake to Launch Aider**: Event → Sensor → Shake
-- **Specific Time**: Time context
-- **When connecting to home WiFi**: State → Net → WiFi Connected
-- **On notification from certain app**: Event → UI → Notification
+Termux:Tasker can return stdout/stderr back to Tasker.
 
-## Returning Output to Tasker
+In your Task:
+- After the Termux:Tasker action, add:
+  - **Variable Set** → name `%aider_output` → value `%stdout` (or the variable Termux:Tasker returns)
 
-You can have your script output variables that Tasker can read, or use Logcat Entry profiles to capture stdout.
+Then you can:
+- Use **Termux:API → TTS Speak** with `%aider_output`
+- Or show a **Notification** with the result
 
-## Limitations on Android
+This way Aider can "talk back" to you through Android's native voice.
 
-- True continuous always-listening is restricted by Android battery rules.
-- AutoVoice helps a lot but may need "continuous" mode enabled in its settings.
-- Test thoroughly and whitelist apps from battery optimization.
+## 5. Other Useful Profile Examples
+
+- **Shake Phone to Start Aider**: Event → Sensor → Shake
+- **When connected to home WiFi**: State → Net → WiFi Connected (SSID = YourHomeWiFi)
+- **Time-based** (e.g. every morning at 9am)
+- **On specific notification**: Event → UI → Notification
+- **Widget / Quick Settings tile**: Add a 1-tap launcher
+
+## 6. Battery Optimization & Reliability Tips
+
+- Whitelist Termux + Tasker from battery optimization (very important on Android 12+)
+- In Termux settings → Battery optimization → Unrestricted
+- Test in background vs foreground
+- For long-running voice listening, you may need a foreground service or Tasker "Stay awake" action
+- AutoVoice has settings for continuous listening — experiment with them
+
+## 7. Advanced: Full pexpect Automation
+
+You can extend `voice_aider.py` (or the launcher) to use `pexpect` to automatically control an Aider session in the background when a voice command arrives.
+
+This is the next level for true hands-free coding on your phone.
+
+If you want me to add an example `pexpect` version of the launcher, just say so.
+
+## Troubleshooting
+
+- **Script not running**: Check path in the launcher and that it's executable.
+- **No voice trigger**: Make sure AutoVoice has microphone permission and Regex is enabled.
+- **Output not returning**: Check the variable name Termux:Tasker uses for stdout (usually `%stdout` or check its docs).
+- **Termux killed in background**: Battery optimization is the #1 cause.
 
 ## Next Steps
 
-Combine this with the `voice_aider.py` from the main setup. You can extend the Python script to accept commands via arguments or stdin.
+1. Pull the latest from this repo.
+2. Set up the basic voice script first (see SETUP.md).
+3. Add the Tasker layer on top for the best hands-free experience.
 
-For full automation, we can add pexpect logic inside the launched script to control Aider sessions.
+This combination (Termux:API + Termux:Tasker + AutoVoice) currently gives the smoothest voice automation possible on Android/Termux without rooting.
 
-Pull the latest from the repo to see updates.
+---
+
+*Updated for your Kali NetHunter + Termux workflow and pipx preference.*
